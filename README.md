@@ -1,14 +1,14 @@
 # ColorizingDMD SeedVR Upscaler
 
-A plugin for the [ColorizingDMD](https://github.com/PPUC/ColorizingDMD) editor that upscales
-colorized SD pictures (128x32) to the HD plane (256x64) with
+A plugin for the [PPUC Colorizing DMD](https://github.com/PPUC/PPUC-Colorizing-DMD) editor
+that upscales colorized SD pictures (128x32) to the HD plane (256x64) with
 [SeedVR2](https://github.com/ByteDance-Seed/SeedVR). It works on frames, backgrounds and
 sprites. SeedVR2 needs Linux, an NVIDIA GPU with CUDA, PyTorch and several GB of models, so it
 runs as a service of its own, on the same computer or on another one. The plugin sends the
 pictures to that service, brings the results back to RGB565 exactly, and proposes them in the
 editor's review window. One Undo takes back what was applied.
 
-Needs the editor with editor API version 3.
+Needs PPUC Colorizing DMD 3.99.30 or later (editor API version 3).
 
 ## Install
 
@@ -44,8 +44,8 @@ on a computer with an NVIDIA GPU, see "The service" below.
    menu then has the SeedVR entries; see "Use" below. A plugin that does not load is named
    there with the reason, and `Help -> Plugin Log` has the details.
 
-The plugin needs an editor with editor API version 3 and the folder for the plugins you
-install. To update it, replace the `SeedVR` folder with the new one; the settings are kept.
+The plugin needs PPUC Colorizing DMD 3.99.30 or later: editor API version 3 and the folder
+for the plugins you install. To update it, replace the `SeedVR` folder with the new one; the settings are kept.
 
 For the service, download `PPUC-Colorizing-DMD-SeedVR-Service-…` from the same release on the
 computer that runs SeedVR2. It holds `seedvr_service.py`, which needs Python 3 and nothing else
