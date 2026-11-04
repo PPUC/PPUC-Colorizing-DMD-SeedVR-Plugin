@@ -1,0 +1,276 @@
+# Builds and tests the plugin for the platforms the editor's packages exist for: Windows
+# (MinGW), Linux x86_64 and aarch64, macOS arm64. Every run uploads one plugin package per
+# platform and the service. A tag v<version> (matching the project VERSION in CMakeLists.txt
+# and the version in plugin.cfg) additionally collects them into a draft GitHub release, which
+# is published by hand.
+name: Build
+
+on:
+  push:
+    # Any branch, so feature branches are checked too.
+    # (Listing tags alone would stop branch pushes from running at all.)
+    branches:
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # The editor API (plugin-api/ColorizingDMDPlugin.h, version 3) of the editor's sources.
+  COLORIZINGDMD_REPOSITORY: PPUC/ColorizingDMD
+  COLORIZINGDMD_SHA: bbcb8b2aeb03edba9a8d26973251e96173a2e7d1
+  # The VPX plugin SDK (plugins/plugins) of PPUC's vpinball fork, at the commit the editor pins
+  # (VPINBALL_SHA in its .github/workflows/qt-editor.yml).
+  VPINBALL_REPOSITORY: PPUC/vpinball
+  VPINBALL_SHA: f87cba08cff98047b8ce3a14a62780de9f51b462
+  # As the editor's macOS package.
+  MACOS_DEPLOYMENT_TARGET: '13.3'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # MinGW-w64 (GCC, UCRT), as the editor is built on Windows.
+          - name: Windows x86_64 (MinGW UCRT64)
+            os: windows-2025
+            platform: windows
+            arch: x86_64
+          - name: Linux x86_64
+            os: ubuntu-24.04
+            platform: linux
+            arch: x86_64
+          - name: Linux aarch64
+            os: ubuntu-24.04-arm
+            platform: linux
+            arch: aarch64
+          - name: macOS arm64
+            os: macos-15
+            platform: macos
+            arch: arm64
+    steps:
+      - name: Check out the plugin
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: plugin
+          persist-credentials: false
+
+      - name: Check out the editor API ${{ env.COLORIZINGDMD_SHA }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.COLORIZINGDMD_REPOSITORY }}
+          ref: ${{ env.COLORIZINGDMD_SHA }}
+          path: ColorizingDMD
+          sparse-checkout: plugin-api
+          persist-credentials: false
+
+      - name: Check out the vpinball plugin SDK ${{ env.VPINBALL_SHA }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ env.VPINBALL_REPOSITORY }}
+          ref: ${{ env.VPINBALL_SHA }}
+          path: vpinball
+          sparse-checkout: plugins/plugins
+          persist-credentials: false
+
+      - name: Name the package
+        run: |
+          # A pull request is named after its head commit, not the merge commit it is built as.
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "PACKAGE=PPUC-Colorizing-DMD-SeedVR-Plugin-${{ matrix.platform }}-${{ matrix.arch }}-${SHA:0:7}.zip" >> "${GITHUB_ENV}"
+          echo "SERVICE_PACKAGE=PPUC-Colorizing-DMD-SeedVR-Service-${SHA:0:7}.zip" >> "${GITHUB_ENV}"
+
+      - name: Install MSYS2 UCRT64 (Windows)
+        if: matrix.platform == 'windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-binutils
+
+      - name: Install tools (Linux)
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: Install tools (macOS)
+        if: matrix.platform == 'macos'
+        run: brew install ninja
+
+      # The libraries GCC brings are linked in statically on Windows, so that the DLL needs
+      # nothing beside it that the editor's package might have in another version.
+      - name: Configure (Windows)
+        if: matrix.platform == 'windows'
+        shell: msys2 {0}
+        run: |
+          cmake -S plugin -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
+            -DCMAKE_MODULE_LINKER_FLAGS="-static" \
+            -DCMAKE_EXE_LINKER_FLAGS="-static" \
+            -DCOLORIZINGDMD_DIR="$(cygpath -m "${GITHUB_WORKSPACE}/ColorizingDMD")" \
+            -DVPINBALL_DIR="$(cygpath -m "${GITHUB_WORKSPACE}/vpinball")"
+
+      - name: Configure
+        if: matrix.platform != 'windows'
+        run: |
+          cmake -S plugin -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_COMPILE_WARNING_AS_ERROR=ON \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET}" \
+            -DCOLORIZINGDMD_DIR="${GITHUB_WORKSPACE}/ColorizingDMD" \
+            -DVPINBALL_DIR="${GITHUB_WORKSPACE}/vpinball"
+
+      - name: Build (Windows)
+        if: matrix.platform == 'windows'
+        shell: msys2 {0}
+        run: cmake --build build --parallel
+
+      - name: Build
+        if: matrix.platform != 'windows'
+        run: cmake --build build --parallel
+
+      - name: Test (Windows)
+        if: matrix.platform == 'windows'
+        shell: msys2 {0}
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Test
+        if: matrix.platform != 'windows'
+        run: ctest --test-dir build --output-on-failure
+
+      # What the library loads besides the system, in the log, and a failure for anything that
+      # is not part of the system.
+      - name: Check the libraries the plugin loads (Windows)
+        if: matrix.platform == 'windows'
+        shell: msys2 {0}
+        run: |
+          objdump -p build/SeedVR/plugin-seedvr64.dll | grep 'DLL Name' | tee dlls.txt
+          if grep -iE 'libstdc|libgcc|libwinpthread' dlls.txt; then
+            echo "::error::The plugin loads GCC's libraries; they should be linked in."
+            exit 1
+          fi
+
+      - name: Check the libraries the plugin loads (Linux)
+        if: matrix.platform == 'linux'
+        run: ldd build/SeedVR/plugin-seedvr.so
+
+      - name: Sign and check the library (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          # Without a signature an arm64 library does not load; ad-hoc is enough, as for the
+          # editor.
+          codesign --force --sign - build/SeedVR/plugin-seedvr.dylib
+          codesign --verify --strict build/SeedVR/plugin-seedvr.dylib
+          otool -L build/SeedVR/plugin-seedvr.dylib
+
+      # The plugin's folder as it goes into the editor's plugin folder, with the license and the
+      # README beside it.
+      - name: Package
+        run: |
+          mkdir -p dist stage/SeedVR
+          cp build/SeedVR/plugin.cfg stage/SeedVR/
+          case "${{ matrix.platform }}" in
+            windows) cp build/SeedVR/plugin-seedvr64.dll stage/SeedVR/ ;;
+            linux) cp build/SeedVR/plugin-seedvr.so stage/SeedVR/ ;;
+            macos) cp build/SeedVR/plugin-seedvr.dylib stage/SeedVR/ ;;
+          esac
+          cp plugin/LICENSE plugin/README.md stage/SeedVR/
+          (cd stage && cmake -E tar cf "../dist/${PACKAGE}" --format=zip SeedVR)
+          unzip -l "dist/${PACKAGE}"
+
+      - name: Upload the package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.PACKAGE }}
+          path: dist/${{ env.PACKAGE }}
+          archive: false
+          if-no-files-found: error
+
+      # The service is the same for every platform; it is packed once.
+      - name: Package the service
+        if: matrix.platform == 'linux' && matrix.arch == 'x86_64'
+        run: |
+          mkdir -p stage-service/SeedVR-Service
+          cp plugin/service/seedvr_service.py plugin/LICENSE plugin/README.md \
+            stage-service/SeedVR-Service/
+          (cd stage-service && cmake -E tar cf "../dist/${SERVICE_PACKAGE}" --format=zip \
+            SeedVR-Service)
+          unzip -l "dist/${SERVICE_PACKAGE}"
+
+      - name: Upload the service
+        if: matrix.platform == 'linux' && matrix.arch == 'x86_64'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.SERVICE_PACKAGE }}
+          path: dist/${{ env.SERVICE_PACKAGE }}
+          archive: false
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the project version
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            CMakeLists.txt
+            plugin.cfg
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Check the tag against the project version
+        run: |
+          VERSION=$(sed -nE 's/^project\(ColorizingDMDSeedVR VERSION ([0-9.]+).*/\1/p' CMakeLists.txt)
+          CFG_VERSION=$(sed -nE 's/^version = "([0-9.]+)"/\1/p' plugin.cfg)
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the project version ${VERSION} (expected v${VERSION})."
+            exit 1
+          fi
+          if [ "${CFG_VERSION}" != "${VERSION}" ]; then
+            echo "::error::plugin.cfg has version ${CFG_VERSION}, CMakeLists.txt ${VERSION}."
+            exit 1
+          fi
+
+      - name: Download the packages
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: PPUC-Colorizing-DMD-SeedVR-*
+          path: dist
+          skip-decompress: true
+
+      - name: List the packages
+        run: find dist -type f -exec ls -l {} +
+
+      - name: Create the draft release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          name: PPUC Colorizing DMD SeedVR Plugin ${{ github.ref_name }}
+          draft: true
+          prerelease: true
+          fail_on_unmatched_files: true
+          files: dist/**/*
