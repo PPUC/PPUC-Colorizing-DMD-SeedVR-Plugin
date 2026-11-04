@@ -12,8 +12,8 @@ Needs the editor with editor API version 3.
 
 ## Install
 
-The plugin goes into the editor's plugin folder; the SeedVR2 service runs on a computer with an
-NVIDIA GPU, see "The service" below.
+The plugin goes into the editor's folder for the plugins you install; the SeedVR2 service runs
+on a computer with an NVIDIA GPU, see "The service" below.
 
 1. Download the plugin for your editor from the
    [releases](https://github.com/PPUC/PPUC-Colorizing-DMD-SeedVR-Plugin/releases), under
@@ -28,29 +28,24 @@ NVIDIA GPU, see "The service" below.
 
    The zip holds one folder, `SeedVR`. Builds of every commit are under the repository's
    `Actions` tab, for testing; they need a GitHub login to download.
-2. Close the editor and put the folder `SeedVR` into the editor's plugin folder, beside the
-   `DMDUtil` and `PUP` folders that are there already:
-   - Windows: the folder `plugins` beside `PPUC-Colorizing-DMD.exe`.
-   - macOS: right-click `PPUC Colorizing DMD.app`, `Show Package Contents`, then
-     `Contents/PlugIns/vpx`. macOS keeps a downloaded file from loading and the changed app
-     from starting; afterwards, in the Terminal, in the folder of the app:
+2. Put the folder `SeedVR` into the editor's folder for the plugins you install.
+   `Settings -> Plugins` names it, and `Open Folder` opens it:
+   - Windows: `%APPDATA%\ppuc.org\PPUC Colorizing DMD\plugins`
+   - macOS: `~/Library/Application Support/ppuc.org/PPUC Colorizing DMD/plugins`
+   - Linux: `~/.local/share/ppuc.org/PPUC Colorizing DMD/plugins`
 
-         xattr -dr com.apple.quarantine "PPUC Colorizing DMD.app"
-         codesign --force --deep --sign - "PPUC Colorizing DMD.app"
+   The folder `SeedVR`, with `plugin.cfg` in it, must lie directly in `plugins`. On macOS,
+   remove the mark macOS puts on downloaded files, or the library does not load; in the
+   Terminal:
 
-     Do this again after each update of the editor or the plugin.
-   - Linux: the AppImage cannot be changed. Unpack it once and run the unpacked editor:
+       xattr -dr com.apple.quarantine ~/Library/Application\ Support/ppuc.org/PPUC\ Colorizing\ DMD/plugins/SeedVR
 
-         ./PPUC-Colorizing-DMD-linux-x86_64-….AppImage --appimage-extract
-         cp -R SeedVR squashfs-root/usr/bin/plugins/
-         squashfs-root/AppRun
-
-3. Start the editor and check `SeedVR Upscaler` under `Settings -> Plugins`. The `Plugins`
+3. Restart the editor and check `SeedVR Upscaler` under `Settings -> Plugins`. The `Plugins`
    menu then has the SeedVR entries; see "Use" below. A plugin that does not load is named
    there with the reason, and `Help -> Plugin Log` has the details.
 
-The plugin needs an editor with editor API version 3. To update it, replace the `SeedVR`
-folder with the new one; the settings are kept.
+The plugin needs an editor with editor API version 3 and the folder for the plugins you
+install. To update it, replace the `SeedVR` folder with the new one; the settings are kept.
 
 For the service, download `PPUC-Colorizing-DMD-SeedVR-Service-…` from the same release on the
 computer that runs SeedVR2. It holds `seedvr_service.py`, which needs Python 3 and nothing else
@@ -81,9 +76,8 @@ for itself.
     ctest --test-dir build --output-on-failure
 
 The build puts the plugin's folder in `build/SeedVR`: `plugin.cfg` and the library. With
-`COLORIZINGDMD_PLUGIN_DIR` set, it is also copied into a development editor's plugin folder. For
-a packaged editor, copy `SeedVR` into its plugin folder: `plugins` beside the program on Windows
-and Linux, `ColorizingDMD.app/Contents/PlugIns/vpx` on macOS.
+`COLORIZINGDMD_PLUGIN_DIR` set, it is also copied into that folder, for example a development
+editor's plugin folder or the folder for the plugins you install (see "Install").
 
 CI (`.github/workflows/build.yml`) builds and tests the plugin for each editor package's
 platform with warnings as errors, against the editor API and the VPX plugin SDK at the commits
