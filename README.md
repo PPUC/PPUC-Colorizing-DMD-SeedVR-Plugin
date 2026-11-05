@@ -44,8 +44,7 @@ on a computer with an NVIDIA GPU, see "The service" below.
    menu then has the SeedVR entries; see "Use" below. A plugin that does not load is named
    there with the reason, and `Help -> Plugin Log` has the details.
 
-The plugin needs PPUC Colorizing DMD 3.99.30 or later: editor API version 3 and the folder
-for the plugins you install. To update it, replace the `SeedVR` folder with the new one; the settings are kept.
+To update the plugin, replace the `SeedVR` folder with the new one; the settings are kept.
 
 For the service, download `PPUC-Colorizing-DMD-SeedVR-Service-…` from the same release on the
 computer that runs SeedVR2. It holds `seedvr_service.py`, which needs Python 3 and nothing else
